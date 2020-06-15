@@ -27,6 +27,10 @@ system(paste0("[ -d ", lossDir, " ] || mkdir ", lossDir))
 library(GenomicAlignments)
 library(dplyr)
 library(ggplot2)
+library(ggthemes)
+library(grid)
+library(gridExtra)
+library(extrafont)
 
 # Genomic definitions
 chrs <- c("Chr1", "Chr2", "Chr3", "Chr4", "Chr5")
@@ -185,11 +189,11 @@ SPO11oligos_mean_TPM <- sapply(seq_along(windowsGR), function(x) {
 
 log2_kss_wt_SPO11oligos_TPM <- sapply(seq_along(windowsGR), function(x) {
   log2(
+    ( mean(c(kss_SPO11oligos_Rep1_winCov$TPM[x],
+             kss_SPO11oligos_Rep2_winCov$TPM[x])) + 1 ) /
     ( mean(c(wt_SPO11oligos_Rep1_winCov$TPM[x],
              wt_SPO11oligos_Rep2_winCov$TPM[x],
-             wt_SPO11oligos_Rep3_winCov$TPM[x])) + 1 ) /
-    ( mean(c(kss_SPO11oligos_Rep1_winCov$TPM[x],
-             kss_SPO11oligos_Rep2_winCov$TPM[x])) + 1 )
+             wt_SPO11oligos_Rep3_winCov$TPM[x])) + 1 )
   )
 })
 
@@ -219,10 +223,10 @@ REC8_HA_mean_TPM <- sapply(seq_along(windowsGR), function(x) {
 
 log2_kss_wt_REC8_HA_TPM <- sapply(seq_along(windowsGR), function(x) {
   log2(
-    ( mean(c(wt_REC8_HA_Rep1_winCov$TPM[x],
-             wt_REC8_HA_Rep2_winCov$TPM[x])) + 1 ) /
     ( mean(c(kss_REC8_HA_Rep1_winCov$TPM[x],
-             kss_REC8_HA_Rep2_winCov$TPM[x])) + 1 )
+             kss_REC8_HA_Rep2_winCov$TPM[x])) + 1 ) /
+    ( mean(c(wt_REC8_HA_Rep1_winCov$TPM[x],
+             wt_REC8_HA_Rep2_winCov$TPM[x])) + 1 )
   )
 })
 
@@ -241,8 +245,8 @@ H3K9me2_mean_TPM <- sapply(seq_along(windowsGR), function(x) {
 
 log2_kss_wt_H3K9me2_TPM <- sapply(seq_along(windowsGR), function(x) {
   log2( 
-    ( wt_H3K9me2_Rep1_winCov$TPM[x] + 1 ) /
-    ( kss_H3K9me2_Rep1_winCov$TPM[x] + 1 )
+    ( kss_H3K9me2_Rep1_winCov$TPM[x] + 1 ) /
+    ( wt_H3K9me2_Rep1_winCov$TPM[x] + 1 )
   )
 })
 
@@ -287,11 +291,16 @@ write.table(featuresDF_kssLoss,
             quote = F, sep = "\t", col.names = T, row.names = F)
 
 
-cov_columns <- which(grepl("Rep", colnames(featuresDF_kssGain)))
-cov_columnNames <- colnames(featuresDF_kssGain)[cov_columns]
-cov_columnNamesPlot <- gsub("_", " ", cov_columnNames)
-cov_columnNamesPlot <- sub(" TPM", "", cov_columnNamesPlot)
-cov_columnNamesPlot <- sub("REC8 ", "REC8-", cov_columnNamesPlot)
+cov_columns <- which(grepl("Rep", colnames(featuresDF)))
+libNames <- colnames(featuresDF)[cov_columns]
+libNamesPlot <- gsub("_", " ", libNames)
+libNamesPlot <- sub(" TPM", "", libNamesPlot)
+libNamesPlot <- sub("REC8 ", "REC8-", libNamesPlot)
+libNamesPlot <- sub("SPO11oligos", "SPO11-1", libNamesPlot)
+libColours <- c(rep("dodgerblue2", 3), rep("navy", 2),
+                rep("red", 3), rep("red4", 2),
+                "green2", "darkgreen")
+
 featuresDF_kssGain_mean <- sapply(cov_columns, function(x) {
   mean(featuresDF_kssGain[,colnames(featuresDF_kssGain) == colnames(featuresDF_kssGain)[x]])
 })
@@ -312,26 +321,110 @@ featuresDF_kssGain_CIupper <- sapply(seq_along(featuresDF_kssGain_mean), functio
       featuresDF_kssGain_SEM[x] )
 })
 
-featuresDF_quantileSEM <- sapply(1:quantiles, function(k) {
-  featuresDF_quantileSD[k] / sqrt( (dim(featuresDF[featuresDF$quantile == paste0("Quantile ", k),])[1] - 1) )
-})
-featuresDF_quantileCIlower <- sapply(1:quantiles, function(k) {
-  featuresDF_quantileMean[k] -
-    ( qt(0.975, df = dim(featuresDF[featuresDF$quantile == paste0("Quantile ", k),])[1]-1 ) *
-      featuresDF_quantileSEM[k] )
-})
-featuresDF_quantileCIupper <- sapply(1:quantiles, function(k) {
-  featuresDF_quantileMean[k] +
-    ( qt(0.975, df = dim(featuresDF[featuresDF$quantile == paste0("Quantile ", k),])[1]-1 ) *
-      featuresDF_quantileSEM[k] )
-})
-featuresDF_summary_stats <- data.frame(quantile = paste0("Quantile ", 1:quantiles),
-                                       Mean = featuresDF_quantileMean,
-                                       SD = featuresDF_quantileSD,
-                                       SEM = featuresDF_quantileSEM,
-                                       CIlower = featuresDF_quantileCIlower,
-                                       CIupper = featuresDF_quantileCIupper,
+featuresDF_kssGain_stats <- data.frame(Library = libNamesPlot,
+                                       Mean = featuresDF_kssGain_mean,
+                                       SD = featuresDF_kssGain_SD,
+                                       SEM = featuresDF_kssGain_SEM,
+                                       CIlower = featuresDF_kssGain_CIlower,
+                                       CIupper = featuresDF_kssGain_CIupper,
                                        stringsAsFactors = F)
+featuresDF_kssGain_stats$Library <- factor(featuresDF_kssGain_stats$Library,
+                                           levels = featuresDF_kssGain_stats$Library)
+
+featuresDF_kssLoss_mean <- sapply(cov_columns, function(x) {
+  mean(featuresDF_kssLoss[,colnames(featuresDF_kssLoss) == colnames(featuresDF_kssLoss)[x]])
+})
+featuresDF_kssLoss_SD <- sapply(cov_columns, function(x) {
+  sd(featuresDF_kssLoss[,colnames(featuresDF_kssLoss) == colnames(featuresDF_kssLoss)[x]])
+})
+featuresDF_kssLoss_SEM <- sapply(seq_along(featuresDF_kssLoss_SD), function(x) {
+  featuresDF_kssLoss_SD[x] / sqrt( (dim(featuresDF_kssLoss)[1] - 1) )
+})
+featuresDF_kssLoss_CIlower <- sapply(seq_along(featuresDF_kssLoss_mean), function(x) {
+  featuresDF_kssLoss_mean[x] -
+    ( qt(0.975, df = dim(featuresDF_kssLoss)[1] - 1) *
+      featuresDF_kssLoss_SEM[x] )
+})
+featuresDF_kssLoss_CIupper <- sapply(seq_along(featuresDF_kssLoss_mean), function(x) {
+  featuresDF_kssLoss_mean[x] +
+    ( qt(0.975, df = dim(featuresDF_kssLoss)[1] - 1) *
+      featuresDF_kssLoss_SEM[x] )
+})
+
+featuresDF_kssLoss_stats <- data.frame(Library = libNamesPlot,
+                                       Mean = featuresDF_kssLoss_mean,
+                                       SD = featuresDF_kssLoss_SD,
+                                       SEM = featuresDF_kssLoss_SEM,
+                                       CIlower = featuresDF_kssLoss_CIlower,
+                                       CIupper = featuresDF_kssLoss_CIupper,
+                                       stringsAsFactors = F)
+featuresDF_kssLoss_stats$Library <- factor(featuresDF_kssLoss_stats$Library,
+                                           levels = featuresDF_kssLoss_stats$Library)
+
+# Plot means and 95% confidence intervals
+popgen_stats_meanCIs <- function(dataFrame,
+                                 parameterLab,
+                                 featureGroup,
+                                 featureNamePlot,
+                                 libColours) {
+  ggplot(data = dataFrame,
+         mapping = aes(x = get(featureGroup),
+                       y = Mean,
+                       colour = get(featureGroup))) +
+  labs(colour = "") +
+  geom_point(shape = 19, size = 6, position = position_dodge(width = 0.2)) +
+  geom_errorbar(mapping = aes(ymin = CIlower,
+                              ymax = CIupper),
+                width = 0.2, size = 2, position = position_dodge(width = 0.2)) +
+  scale_colour_manual(values = libColours) +
+  scale_y_continuous(limits = c(min(dataFrame$CIlower), max(dataFrame$CIupper)),
+                     labels = function(x) sprintf("%1.2f", x)) +
+#  scale_x_discrete(breaks = as.vector(dataFrame$Library),
+#                   labels = as.vector(dataFrame$Library)) +
+  labs(x = "",
+       y = parameterLab) +
+  theme_bw() +
+  theme(axis.line.y = element_line(size = 2.0, colour = "black"),
+        axis.ticks.y = element_line(size = 2.0, colour = "black"),
+        axis.ticks.x = element_blank(),
+        axis.ticks.length = unit(0.25, "cm"),
+        axis.text.y = element_text(size = 18, colour = "black", family = "Luxi Mono"),
+        axis.text.x = element_text(size = 22, colour = libColours, hjust = 1.0, vjust = 1.0, angle = 45),
+        axis.title = element_text(size = 26, colour = "black"),
+        legend.position = "none",
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        plot.margin = unit(c(0.3,1.2,0.1,0.3),"cm"),
+        plot.title = element_text(hjust = 0.5, size = 30)) +
+  ggtitle(featureNamePlot)
+}
+
+ggObjGA_kssGain_mean <- popgen_stats_meanCIs(dataFrame = featuresDF_kssGain_stats,
+                                             parameterLab = "ChIP TPM - control TPM",
+                                             featureGroup = "Library",
+                                             featureNamePlot = bquote(.(winSize/1e3) * "-kb genomic windows with log"[2] *
+                                                                      "(kss " * .(L2FCfactor) * "/wt " * .(L2FCfactor) *
+                                                                      ") TPM >= " * .(L2FCthreshold)),
+                                             libColours = libColours
+                                            )
+ggObjGA_kssLoss_mean <- popgen_stats_meanCIs(dataFrame = featuresDF_kssLoss_stats,
+                                             parameterLab = "ChIP TPM - control TPM",
+                                             featureGroup = "Library",
+                                             featureNamePlot = bquote(.(winSize/1e3) * "-kb genomic windows with log"[2] *
+                                                                      "(kss " * .(L2FCfactor) * "/wt " * .(L2FCfactor) *
+                                                                      ") TPM <= -" * .(L2FCthreshold)),
+                                             libColours = libColours
+                                            )
+ggObjGA_combined <- grid.arrange(ggObjGA_kssGain_mean,
+                                 ggObjGA_kssLoss_mean,
+                                 ncol = 1, as.table = F)
+ggsave(paste0(outDir,
+              winSize/1e3, "kb_genomic_windows_with_log2_kss_wt_", L2FCfactor,
+              "_TPM_moreThanOrEqualToPlus", as.character(L2FCthreshold),
+              "_and_lessThanOrEqualToMinus", as.character(L2FCthreshold), ".pdf"),
+      plot = ggObjGA_combined,
+      height = 26, width = 18)
 
 # Make MA plot           
 feature_meanTPM_log2TPM_df <- as_data_frame(cbind(mean_TPM = featuresDF[,grepl(paste0(L2FCfactor, "_mean_TPM"),
