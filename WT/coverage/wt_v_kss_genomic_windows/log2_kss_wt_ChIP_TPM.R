@@ -2,9 +2,8 @@
 
 # contact: ajt200@cam.ac.uk (Andy Tock)
 
-# Calculate ChIP-seq TPM values and mean DNA methylation values
-# in genomic windows, and identify windows in which log2(kss/wt)
-# SPO11-1-oligos levels exceed log2FC
+# Calculate ChIP-seq TPM values inw winSize-bp genomic windows,
+# and identify windows in which log2(kss/wt) L2FCfactor levels exceed log2FC
 
 # Usage on hydrogen node7:
 # /scripts/csmit -m 20G -c 1 "Rscript ./log2_kss_wt_ChIP_TPM.R 1000 1 SPO11oligos"
@@ -17,12 +16,13 @@ winSize <- as.numeric(args[1])
 L2FCthreshold <- as.numeric(args[2])
 L2FCfactor <- args[3]
 
+# Create directory to contain symbolic links to aligned data (BAM files)
+system("[ -d reads ] || mkdir reads")
+# Create symbolic links to aligned data (BAM files)
+system("ln -s /projects/ajt200/BAM_masters/SPO11-oligo/WT/coverage/wt_v_kss_genomic_windows/reads/*.bam  reads/")
+# Create output directory specific to L2FCfactor (SPO11oligos in this example)
 outDir <- paste0(L2FCfactor, "/")
-gainDir <- paste0(outDir, "gain/")
-lossDir <- paste0(outDir, "loss/")
 system(paste0("[ -d ", outDir, " ] || mkdir ", outDir))
-system(paste0("[ -d ", gainDir, " ] || mkdir ", gainDir))
-system(paste0("[ -d ", lossDir, " ] || mkdir ", lossDir))
 
 library(GenomicAlignments)
 library(dplyr)
@@ -252,27 +252,28 @@ log2_kss_wt_H3K9me2_TPM <- sapply(seq_along(windowsGR), function(x) {
 
 # Combine wt and kss TPM values for each library in one dataframe
 featuresDF <- data.frame(windowsGR,
-                         wt_SPO11oligos_Rep1_TPM = wt_SPO11oligos_Rep1_winCov$TPM,
-                         wt_SPO11oligos_Rep2_TPM = wt_SPO11oligos_Rep2_winCov$TPM,
-                         wt_SPO11oligos_Rep3_TPM = wt_SPO11oligos_Rep3_winCov$TPM,
-                         kss_SPO11oligos_Rep1_TPM = kss_SPO11oligos_Rep1_winCov$TPM,
-                         kss_SPO11oligos_Rep2_TPM = kss_SPO11oligos_Rep2_winCov$TPM,
+                         wt_SPO11oligos_Rep1_TPM = wt_SPO11oligos_Rep1_winCov$ChIP_TPM,
+                         wt_SPO11oligos_Rep2_TPM = wt_SPO11oligos_Rep2_winCov$ChIP_TPM,
+                         wt_SPO11oligos_Rep3_TPM = wt_SPO11oligos_Rep3_winCov$ChIP_TPM,
+                         kss_SPO11oligos_Rep1_TPM = kss_SPO11oligos_Rep1_winCov$ChIP_TPM,
+                         kss_SPO11oligos_Rep2_TPM = kss_SPO11oligos_Rep2_winCov$ChIP_TPM,
                          SPO11oligos_mean_TPM = SPO11oligos_mean_TPM,
                          log2_kss_wt_SPO11oligos_TPM = log2_kss_wt_SPO11oligos_TPM,
-                         wt_REC8_HA_Rep1_TPM = wt_REC8_HA_Rep1_winCov$TPM,
-                         wt_REC8_HA_Rep2_TPM = wt_REC8_HA_Rep2_winCov$TPM,
-                         wt_REC8_Myc_Rep1_TPM = wt_REC8_Myc_Rep1_winCov$TPM,
-                         kss_REC8_HA_Rep1_TPM = kss_REC8_HA_Rep1_winCov$TPM,
-                         kss_REC8_HA_Rep2_TPM = kss_REC8_HA_Rep2_winCov$TPM,
+                         wt_REC8_HA_Rep1_TPM = wt_REC8_HA_Rep1_winCov$ChIP_TPM,
+                         wt_REC8_HA_Rep2_TPM = wt_REC8_HA_Rep2_winCov$ChIP_TPM,
+                         wt_REC8_Myc_Rep1_TPM = wt_REC8_Myc_Rep1_winCov$ChIP_TPM,
+                         kss_REC8_HA_Rep1_TPM = kss_REC8_HA_Rep1_winCov$ChIP_TPM,
+                         kss_REC8_HA_Rep2_TPM = kss_REC8_HA_Rep2_winCov$ChIP_TPM,
                          REC8_HA_mean_TPM = REC8_HA_mean_TPM,
                          log2_kss_wt_REC8_HA_TPM = log2_kss_wt_REC8_HA_TPM,
-                         wt_H3K9me2_Rep1_TPM = wt_H3K9me2_Rep1_winCov$TPM,
-                         kss_H3K9me2_Rep1_TPM = kss_H3K9me2_Rep1_winCov$TPM,
+                         wt_H3K9me2_Rep1_TPM = wt_H3K9me2_Rep1_winCov$ChIP_TPM,
+                         kss_H3K9me2_Rep1_TPM = kss_H3K9me2_Rep1_winCov$ChIP_TPM,
                          H3K9me2_mean_TPM = H3K9me2_mean_TPM,
                          log2_kss_wt_H3K9me2_TPM = log2_kss_wt_H3K9me2_TPM,
                          stringsAsFactors = F)
-                       
-# Select features with greatest gain and loss of L2FCfactor in kss
+ 
+# Extract features at which the gain or loss of L2FCfactor in kss meets or exceeds L2FCthreshold
+# and save these feature tables to outDir
 featuresDF_kssGain <- featuresDF[featuresDF[,grepl(paste0("log2_kss_wt_", L2FCfactor),
                                                    colnames(featuresDF))] >= L2FCthreshold,]
 featuresDF_kssLoss <- featuresDF[featuresDF[,grepl(paste0("log2_kss_wt_", L2FCfactor),
@@ -291,6 +292,8 @@ write.table(featuresDF_kssLoss,
             quote = F, sep = "\t", col.names = T, row.names = F)
 
 
+# Plot wt and kss TPM means and 95% confidence intervals
+# (non-overlapping 95% CIs indicate significant differences)
 cov_columns <- which(grepl("Rep", colnames(featuresDF)))
 libNames <- colnames(featuresDF)[cov_columns]
 libNamesPlot <- gsub("_", " ", libNames)
@@ -362,7 +365,7 @@ featuresDF_kssLoss_stats$Library <- factor(featuresDF_kssLoss_stats$Library,
                                            levels = featuresDF_kssLoss_stats$Library)
 
 # Plot means and 95% confidence intervals
-popgen_stats_meanCIs <- function(dataFrame,
+genotype_TPM_meanCIs <- function(dataFrame,
                                  parameterLab,
                                  featureGroup,
                                  featureNamePlot,
@@ -378,7 +381,7 @@ popgen_stats_meanCIs <- function(dataFrame,
                 width = 0.2, size = 2, position = position_dodge(width = 0.2)) +
   scale_colour_manual(values = libColours) +
   scale_y_continuous(limits = c(min(dataFrame$CIlower), max(dataFrame$CIupper)),
-                     labels = function(x) sprintf("%1.2f", x)) +
+                     labels = function(x) sprintf("%1.1f", x)) +
 #  scale_x_discrete(breaks = as.vector(dataFrame$Library),
 #                   labels = as.vector(dataFrame$Library)) +
   labs(x = "",
@@ -400,22 +403,24 @@ popgen_stats_meanCIs <- function(dataFrame,
   ggtitle(featureNamePlot)
 }
 
-ggObjGA_kssGain_mean <- popgen_stats_meanCIs(dataFrame = featuresDF_kssGain_stats,
-                                             parameterLab = "ChIP TPM - control TPM",
+ggObjGA_kssGain_mean <- genotype_TPM_meanCIs(dataFrame = featuresDF_kssGain_stats,
+                                             parameterLab = "TPM",
                                              featureGroup = "Library",
                                              featureNamePlot = bquote(.(winSize/1e3) * "-kb genomic windows with log"[2] *
                                                                       "(kss " * .(L2FCfactor) * "/wt " * .(L2FCfactor) *
                                                                       ") TPM >= " * .(L2FCthreshold)),
-                                             libColours = libColours
-                                            )
-ggObjGA_kssLoss_mean <- popgen_stats_meanCIs(dataFrame = featuresDF_kssLoss_stats,
-                                             parameterLab = "ChIP TPM - control TPM",
+                                             libColours = libColours)
+ggObjGA_kssLoss_mean <- genotype_TPM_meanCIs(dataFrame = featuresDF_kssLoss_stats,
+                                             parameterLab = "TPM",
                                              featureGroup = "Library",
                                              featureNamePlot = bquote(.(winSize/1e3) * "-kb genomic windows with log"[2] *
                                                                       "(kss " * .(L2FCfactor) * "/wt " * .(L2FCfactor) *
                                                                       ") TPM <= -" * .(L2FCthreshold)),
-                                             libColours = libColours
-                                            )
+                                             libColours = libColours)
+# Generates warning message but still works as expected
+#Warning message:
+#Vectorized input to `element_text()` is not officially supported.                                                 
+#Results may be unexpected or may change in future versions of ggplot2. 
 ggObjGA_combined <- grid.arrange(ggObjGA_kssGain_mean,
                                  ggObjGA_kssLoss_mean,
                                  ncol = 1, as.table = F)
@@ -483,5 +488,3 @@ ggsave(MAplot,
                      winSize/1e3, "kb_genomic_windows_with_log2_kss_wt_", L2FCfactor,
                      "_TPM_L2FC", as.character(L2FCthreshold), "_MAplot.pdf"),
        height = 6, width = 10)
-
-
