@@ -382,8 +382,6 @@ genotype_TPM_meanCIs <- function(dataFrame,
   scale_colour_manual(values = libColours) +
   scale_y_continuous(limits = c(min(dataFrame$CIlower), max(dataFrame$CIupper)),
                      labels = function(x) sprintf("%1.1f", x)) +
-#  scale_x_discrete(breaks = as.vector(dataFrame$Library),
-#                   labels = as.vector(dataFrame$Library)) +
   labs(x = "",
        y = parameterLab) +
   theme_bw() +
